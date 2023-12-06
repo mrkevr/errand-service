@@ -1,0 +1,84 @@
+package dev.mrkevr.errand_service.service;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.UUID;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import dev.mrkevr.errand_service.entity.ImageFile;
+import dev.mrkevr.errand_service.exception.ImageFileNotFoundException;
+import dev.mrkevr.errand_service.repository.ImageFileRepository;
+import lombok.RequiredArgsConstructor;
+
+@Service
+@RequiredArgsConstructor
+public class FileService {
+
+	@Value("${file_dir}")
+	private String fileDirectory;
+	
+	private final ImageFileRepository imageFileRepository;
+	
+	public String uploadImageFileToDirectory(String username, MultipartFile file) throws IOException {
+		String filePath = fileDirectory + File.separator + username + this.getFileExtension(file.getOriginalFilename());
+		
+		try {
+			Files.copy(
+				file.getInputStream(),
+				Paths.get(filePath),
+				StandardCopyOption.REPLACE_EXISTING);
+		} catch (Exception e) {
+			throw new RuntimeException(e.getMessage());
+		}
+		
+		return filePath;
+	}
+	
+	public byte[] getImageById(UUID id) {
+		
+		// Fetch entity from db
+		ImageFile imageFile = imageFileRepository.findById(id).orElseThrow(() -> new ImageFileNotFoundException());
+		// Get the directory path from entity
+		String filePath = imageFile.getFilePath();
+		
+		try {
+            Path imagePath = Paths.get(filePath);
+            // Load the image file as a resource
+            Resource resource = new UrlResource(imagePath.toUri());
+            // Read the image file into an InputStream
+            try (InputStream inputStream = resource.getInputStream()) {
+                // Read the image bytes into a byte array
+                byte[] imageBytes = inputStream.readAllBytes();
+                // Return the image bytes in the response
+                return imageBytes;
+            }
+        } catch (IOException e) {
+            // Handle exceptions such as file not found or IO errors
+            e.printStackTrace();
+            throw new RuntimeException(e.getMessage());
+        }
+	}
+	
+	/**
+	 * Removes all characters before the last 'DOT' from the name.
+	 */
+	private String getFileExtension(String name) {
+		String extension;
+		try {
+			extension = name.substring(name.lastIndexOf("."));
+		} catch (Exception e) {
+			extension = "";
+		}
+		return extension;
+	}
+}
